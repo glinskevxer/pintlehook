@@ -1,0 +1,38 @@
+{
+  "name": "pintlehook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Carrier referral bounty administration for a freight brokerage",
+  "license": "UNLICENSED",
+  "author": "glinskevxer <roym78109@gmail.com>",
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "commander": "13.1.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.20.0",
+    "@types/node": "20.17.19",
+    "@vitest/coverage-v8": "3.0.8",
+    "eslint": "9.20.1",
+    "eslint-config-prettier": "10.0.1",
+    "prettier": "3.5.1",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.24.0",
+    "vitest": "3.0.8"
+  }
+}
