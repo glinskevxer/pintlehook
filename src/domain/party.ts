@@ -30,9 +30,9 @@ export interface Party {
   readonly motorCarrierNumber: string;
   readonly dotNumber: string;
   readonly authorityStatus: AuthorityStatus;
-  readonly authoritySince?: Day;
+  readonly authoritySince?: Day | undefined;
   readonly remit: RemitAddress;
-  readonly bank?: BankAccount;
+  readonly bank?: BankAccount | undefined;
   readonly powerUnits: number;
 }
 

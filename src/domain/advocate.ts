@@ -15,8 +15,8 @@ export type EnrolmentEndReason = 'withdrew' | 'suspended' | 'authority_lost' | '
 
 export interface EnrolmentSpell {
   readonly from: Day;
-  readonly until?: Day;
-  readonly endReason?: EnrolmentEndReason;
+  readonly until?: Day | undefined;
+  readonly endReason?: EnrolmentEndReason | undefined;
 }
 
 export interface Advocate {

@@ -23,7 +23,7 @@ export interface PacketApproval {
   readonly kind: ApprovalKind;
   readonly approvedOn: Day;
   /** Present when the packet was approved conditionally. */
-  readonly insuranceClearedOn?: Day;
+  readonly insuranceClearedOn?: Day | undefined;
 }
 
 export type ActivationBasis =
@@ -36,7 +36,7 @@ export interface Activation {
   readonly effectiveOn: Day;
   readonly basis: ActivationBasis;
   /** Days the certificate took, counted from the conditional approval. */
-  readonly cureDays?: number;
+  readonly cureDays?: number | undefined;
   readonly backdated: boolean;
 }
 

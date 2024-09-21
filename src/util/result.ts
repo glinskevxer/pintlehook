@@ -7,7 +7,7 @@
 export interface Problem {
   readonly code: string;
   readonly message: string;
-  readonly path?: string;
+  readonly path?: string | undefined;
 }
 
 export interface Ok<T> {

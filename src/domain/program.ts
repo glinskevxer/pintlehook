@@ -44,7 +44,7 @@ export interface Program {
   readonly id: ProgramId;
   readonly name: string;
   readonly openedOn: Day;
-  readonly closedOn?: Day;
+  readonly closedOn?: Day | undefined;
   readonly versions: readonly ProgramVersion[];
 }
 
