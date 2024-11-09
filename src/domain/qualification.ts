@@ -15,7 +15,8 @@ import type { Day } from '../util/clock.js';
 import { contains, intervalOfLength, type DayInterval } from '../util/interval.js';
 import { money, sum, type Currency, type Money } from '../util/money.js';
 import { sorted } from '../util/ordering.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { ok, type Result } from '../util/result.js';
+import { requireAllCurrency, requireWholeCount, requireWholeDays } from './rules.js';
 import { grossMargin, isDelivered, loadOrder, type Load } from './load.js';
 
 export interface QualificationInput {
@@ -45,13 +46,8 @@ export type QualificationOutcome =
     };
 
 export function qualifyingWindow(effectiveActivation: Day, days: number): Result<DayInterval> {
-  if (!Number.isInteger(days) || days <= 0) {
-    return fail(
-      'qualifying_window_length',
-      'the qualifying window must be a positive whole number of days',
-    );
-  }
-  return ok(intervalOfLength(effectiveActivation, days));
+  const checked = requireWholeDays('qualifying_window_length', 'qualifying window', days);
+  return checked.ok ? ok(intervalOfLength(effectiveActivation, days)) : checked;
 }
 
 export function countsTowardsQualification(load: Load, window: DayInterval): boolean {
@@ -59,11 +55,13 @@ export function countsTowardsQualification(load: Load, window: DayInterval): boo
 }
 
 export function resolveQualification(input: QualificationInput): Result<QualificationOutcome> {
-  if (!Number.isInteger(input.qualifyingLoadCount) || input.qualifyingLoadCount <= 0) {
-    return fail(
-      'qualifying_count_invalid',
-      'the qualifying load count must be a positive whole number',
-    );
+  const count = requireWholeCount(
+    'qualifying_count_invalid',
+    'qualifying load count',
+    input.qualifyingLoadCount,
+  );
+  if (!count.ok) {
+    return count;
   }
   const window = qualifyingWindow(input.effectiveActivation, input.qualifyingWindowDays);
   if (!window.ok) {
@@ -73,12 +71,15 @@ export function resolveQualification(input: QualificationInput): Result<Qualific
     input.loads.filter((load) => countsTowardsQualification(load, window.value)),
     loadOrder,
   );
-  const wrongCurrency = counting.find((load) => load.currency !== input.currency);
-  if (wrongCurrency !== undefined) {
-    return fail(
-      'qualifying_currency_mismatch',
-      `load ${wrongCurrency.proNumber} is in ${wrongCurrency.currency}, the program pays ${input.currency}`,
-    );
+  const currencies = requireAllCurrency(
+    'qualifying_currency_mismatch',
+    input.currency,
+    counting,
+    (load) => load.currency,
+    (load) => `load ${load.proNumber}`,
+  );
+  if (!currencies.ok) {
+    return currencies;
   }
   const deliveredMargin = sum(
     counting.map((load) => grossMargin(load)),

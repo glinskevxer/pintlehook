@@ -25,7 +25,8 @@ import {
   type Money,
 } from '../util/money.js';
 import { applyRate, type BasisPoints } from '../util/rate.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { ok, type Result } from '../util/result.js';
+import { requireCurrency, requireNotNegative } from './rules.js';
 
 export interface RecoveryPolicy {
   /** Most of a settlement that may be withheld against a recovery balance. */
@@ -61,8 +62,14 @@ export function openFrom(
   position: Money,
   on: Day,
 ): Result<RecoveryBalance> {
-  if (position.currency !== balance.outstanding.currency) {
-    return fail('recovery_currency_mismatch', 'a position and a balance must share a currency');
+  const matched = requireCurrency(
+    'recovery_currency_mismatch',
+    balance.outstanding.currency,
+    position,
+    'the position',
+  );
+  if (!matched.ok) {
+    return matched;
   }
   if (position.minor >= 0) {
     return ok(balance);
@@ -84,17 +91,31 @@ export function applyToSettlement(
   policy: RecoveryPolicy,
   on: Day,
 ): Result<RecoveryApplication> {
-  if (grossPayable.currency !== policy.currency) {
-    return fail(
-      'recovery_currency_mismatch',
-      `a settlement in ${grossPayable.currency} cannot meet a policy in ${policy.currency}`,
-    );
+  const settlementCurrency = requireCurrency(
+    'recovery_currency_mismatch',
+    policy.currency,
+    grossPayable,
+    'the settlement',
+  );
+  if (!settlementCurrency.ok) {
+    return settlementCurrency;
   }
-  if (balance.outstanding.currency !== policy.currency) {
-    return fail('recovery_currency_mismatch', 'the balance is in another currency');
+  const balanceCurrency = requireCurrency(
+    'recovery_currency_mismatch',
+    policy.currency,
+    balance.outstanding,
+    'the balance',
+  );
+  if (!balanceCurrency.ok) {
+    return balanceCurrency;
   }
-  if (grossPayable.minor < 0) {
-    return fail('recovery_negative_settlement', 'a settlement cannot be negative here');
+  const payable = requireNotNegative(
+    'recovery_negative_settlement',
+    'a settlement',
+    grossPayable.minor,
+  );
+  if (!payable.ok) {
+    return payable;
   }
   if (isClear(balance)) {
     return ok({ withheld: zero(policy.currency), paid: grossPayable, balanceAfter: balance });

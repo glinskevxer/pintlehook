@@ -14,6 +14,7 @@ import { formatMoney, money, type Currency, type Money } from '../util/money.js'
 import { applyRate, formatBasisPoints, type BasisPoints } from '../util/rate.js';
 import { ascending, byKey, sorted } from '../util/ordering.js';
 import { fail, ok, type Result } from '../util/result.js';
+import { requireCurrency } from './rules.js';
 
 export interface Tier {
   readonly name: string;
@@ -100,11 +101,14 @@ export function tierIndexForCount(schedule: RewardSchedule, count: number): numb
 
 /** What one qualified referral is worth at a tier, given the margin it carried. */
 export function rewardFor(tier: Tier, currency: Currency, deliveredMargin: Money): Result<Money> {
-  if (deliveredMargin.currency !== currency) {
-    return fail(
-      'schedule_currency_mismatch',
-      `margin is ${deliveredMargin.currency} against a schedule in ${currency}`,
-    );
+  const matched = requireCurrency(
+    'schedule_currency_mismatch',
+    currency,
+    deliveredMargin,
+    'the delivered margin',
+  );
+  if (!matched.ok) {
+    return matched;
   }
   const share = applyRate(deliveredMargin, tier.marginShare);
   return ok(money(currency, tier.flatMinor + share.minor));

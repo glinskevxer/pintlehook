@@ -15,7 +15,8 @@ import { contains, type DayInterval } from '../util/interval.js';
 import { money, subtract, sum, type Currency, type Money } from '../util/money.js';
 import { applyRate, type BasisPoints } from '../util/rate.js';
 import { ascending, byKey, sorted } from '../util/ordering.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { ok, type Result } from '../util/result.js';
+import { requireAllCurrency, requireCurrency } from './rules.js';
 import type { ClaimId, LoadId } from './identity.js';
 
 export type ClaimDisposition = 'charged_to_carrier' | 'absorbed' | 'denied' | 'open';
@@ -66,18 +67,24 @@ export function isChargedBack(claim: CargoClaim, window: DayInterval): boolean {
 
 export function assessClawback(input: ClawbackInput): Result<ClawbackOutcome> {
   const currency = input.policy.currency;
-  if (input.deliveredMargin.currency !== currency) {
-    return fail(
-      'clawback_currency_mismatch',
-      `margin is ${input.deliveredMargin.currency} against a policy in ${currency}`,
-    );
+  const marginCurrency = requireCurrency(
+    'clawback_currency_mismatch',
+    currency,
+    input.deliveredMargin,
+    'the delivered margin',
+  );
+  if (!marginCurrency.ok) {
+    return marginCurrency;
   }
-  const foreign = input.claims.find((claim) => claim.currency !== currency);
-  if (foreign !== undefined) {
-    return fail(
-      'clawback_currency_mismatch',
-      `claim ${foreign.id} is in ${foreign.currency} against a policy in ${currency}`,
-    );
+  const claimCurrencies = requireAllCurrency(
+    'clawback_currency_mismatch',
+    currency,
+    input.claims,
+    (claim) => claim.currency,
+    (claim) => `claim ${claim.id}`,
+  );
+  if (!claimCurrencies.ok) {
+    return claimCurrencies;
   }
   const charged = sorted(
     input.claims.filter((claim) => isChargedBack(claim, input.policy.retentionWindow)),

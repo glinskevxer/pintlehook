@@ -14,7 +14,8 @@
 import { localDayOf, type ZoneId } from '../util/zoned.js';
 import { contains, windowEndingOn, type DayInterval } from '../util/interval.js';
 import { sorted } from '../util/ordering.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { ok, type Result } from '../util/result.js';
+import { requireWholeDays } from './rules.js';
 import type { Day } from '../util/clock.js';
 import type { AdvocateId } from './identity.js';
 import { touchOrder, type ReferralTouch } from './touch.js';
@@ -56,13 +57,8 @@ export interface AttributionInput {
 }
 
 export function attributionWindow(effectiveActivation: Day, days: number): Result<DayInterval> {
-  if (!Number.isInteger(days) || days <= 0) {
-    return fail(
-      'attribution_window_length',
-      'the attribution window must be a positive whole number of days',
-    );
-  }
-  return ok(windowEndingOn(effectiveActivation, days));
+  const checked = requireWholeDays('attribution_window_length', 'attribution window', days);
+  return checked.ok ? ok(windowEndingOn(effectiveActivation, days)) : checked;
 }
 
 export function touchDay(touch: ReferralTouch, zone: ZoneId): Day {

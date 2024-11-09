@@ -16,7 +16,8 @@ import {
   splitIntoPeriods,
   type DayInterval,
 } from '../util/interval.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { ok, type Result } from '../util/result.js';
+import { requireWholeDays } from './rules.js';
 import { isDelivered, type Load } from './load.js';
 
 export type RetentionState = 'holding' | 'satisfied' | 'failed';
@@ -47,13 +48,8 @@ export interface RetentionInput {
 }
 
 export function retentionWindow(qualifiedOn: Day, retentionDays: number): Result<DayInterval> {
-  if (!Number.isInteger(retentionDays) || retentionDays <= 0) {
-    return fail(
-      'retention_window_length',
-      'the retention window must be a positive whole number of days',
-    );
-  }
-  return ok(intervalOfLength(qualifiedOn, retentionDays));
+  const checked = requireWholeDays('retention_window_length', 'retention window', retentionDays);
+  return checked.ok ? ok(intervalOfLength(qualifiedOn, retentionDays)) : checked;
 }
 
 export function assessRetention(input: RetentionInput): Result<RetentionAssessment> {
@@ -61,11 +57,13 @@ export function assessRetention(input: RetentionInput): Result<RetentionAssessme
   if (!window.ok) {
     return window;
   }
-  if (!Number.isInteger(input.checkpointDays) || input.checkpointDays <= 0) {
-    return fail(
-      'retention_checkpoint_length',
-      'a checkpoint must be a positive whole number of days',
-    );
+  const checkpoint = requireWholeDays(
+    'retention_checkpoint_length',
+    'checkpoint',
+    input.checkpointDays,
+  );
+  if (!checkpoint.ok) {
+    return checkpoint;
   }
   const periods = splitIntoPeriods(window.value, input.checkpointDays);
   const delivered = input.loads.filter(
