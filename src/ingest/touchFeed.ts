@@ -10,7 +10,7 @@ import { err, ok, type Result } from '../util/result.js';
 import { TOUCH_CHANNELS, type TouchChannel } from '../domain/touch.js';
 import { readInstant, readOneOf, readOptionalText, readText, type Row } from './coerce.js';
 import type { FeedEnvelope } from './envelope.js';
-import { rowReference, type FeedRead, type RejectedRow } from './feed.js';
+import { readRows, rowReference, type FeedRead } from './feed.js';
 
 export interface TouchDraft {
   readonly presentedCode: string;
@@ -57,18 +57,7 @@ export function readTouchRow(
 }
 
 export function readTouchFeed(envelope: FeedEnvelope, rows: readonly Row[]): FeedRead<TouchDraft> {
-  const accepted: TouchDraft[] = [];
-  const rejected: RejectedRow[] = [];
-  rows.forEach((row, index) => {
-    const rowNumber = index + 1;
-    const draft = readTouchRow(envelope, row, rowNumber);
-    if (draft.ok) {
-      accepted.push(draft.value);
-    } else {
-      rejected.push({ rowNumber, problems: draft.problems, row });
-    }
-  });
-  return { envelope, accepted, rejected };
+  return readRows(envelope, rows, readTouchRow);
 }
 
 /** A draft with nothing to identify the invitee cannot be attributed later. */

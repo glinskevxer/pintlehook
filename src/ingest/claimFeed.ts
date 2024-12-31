@@ -21,7 +21,7 @@ import {
   type Row,
 } from './coerce.js';
 import type { FeedEnvelope } from './envelope.js';
-import { rowReference, type FeedRead, type RejectedRow } from './feed.js';
+import { readRows, rowReference, type FeedRead } from './feed.js';
 
 const DISPOSITIONS = ['charged_to_carrier', 'absorbed', 'denied', 'open'] as const;
 
@@ -93,18 +93,7 @@ export function readClaimRow(
 }
 
 export function readClaimFeed(envelope: FeedEnvelope, rows: readonly Row[]): FeedRead<ClaimDraft> {
-  const accepted: ClaimDraft[] = [];
-  const rejected: RejectedRow[] = [];
-  rows.forEach((row, index) => {
-    const rowNumber = index + 1;
-    const draft = readClaimRow(envelope, row, rowNumber);
-    if (draft.ok) {
-      accepted.push(draft.value);
-    } else {
-      rejected.push({ rowNumber, problems: draft.problems, row });
-    }
-  });
-  return { envelope, accepted, rejected };
+  return readRows(envelope, rows, readClaimRow);
 }
 
 /** The later statement about a claim wins, keyed on the administrator reference. */

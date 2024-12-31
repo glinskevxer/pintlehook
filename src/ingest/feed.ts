@@ -5,7 +5,7 @@
  * should not have to ship the file again.
  */
 
-import type { Problem } from '../util/result.js';
+import type { Problem, Result } from '../util/result.js';
 import type { FeedEnvelope } from './envelope.js';
 import type { Row } from './coerce.js';
 
@@ -19,6 +19,31 @@ export interface FeedRead<T> {
   readonly envelope: FeedEnvelope;
   readonly accepted: readonly T[];
   readonly rejected: readonly RejectedRow[];
+}
+
+/**
+ * Every adapter walked the rows the same way, numbering from one and splitting
+ * the results into two lists. Four copies of that loop meant four places to get
+ * the row numbering wrong, so it lives here now and an adapter only says how to
+ * read one row.
+ */
+export function readRows<T>(
+  envelope: FeedEnvelope,
+  rows: readonly Row[],
+  readOne: (envelope: FeedEnvelope, row: Row, rowNumber: number) => Result<T>,
+): FeedRead<T> {
+  const accepted: T[] = [];
+  const rejected: RejectedRow[] = [];
+  rows.forEach((row, index) => {
+    const rowNumber = index + 1;
+    const read = readOne(envelope, row, rowNumber);
+    if (read.ok) {
+      accepted.push(read.value);
+    } else {
+      rejected.push({ rowNumber, problems: read.problems, row });
+    }
+  });
+  return { envelope, accepted, rejected };
 }
 
 export function rowReference(envelope: FeedEnvelope, rowNumber: number): string {

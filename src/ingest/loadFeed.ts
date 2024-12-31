@@ -23,7 +23,7 @@ import {
   type Row,
 } from './coerce.js';
 import type { FeedEnvelope } from './envelope.js';
-import { rowReference, type FeedRead, type RejectedRow } from './feed.js';
+import { readRows, rowReference, type FeedRead } from './feed.js';
 
 const LOAD_STATUSES = ['delivered', 'cancelled', 'refused', 'in_transit'] as const;
 
@@ -130,18 +130,7 @@ export function readLoadRow(
 }
 
 export function readLoadFeed(envelope: FeedEnvelope, rows: readonly Row[]): FeedRead<LoadDraft> {
-  const accepted: LoadDraft[] = [];
-  const rejected: RejectedRow[] = [];
-  rows.forEach((row, index) => {
-    const rowNumber = index + 1;
-    const draft = readLoadRow(envelope, row, rowNumber);
-    if (draft.ok) {
-      accepted.push(draft.value);
-    } else {
-      rejected.push({ rowNumber, problems: draft.problems, row });
-    }
-  });
-  return { envelope, accepted, rejected };
+  return readRows(envelope, rows, readLoadRow);
 }
 
 export function deliveredDrafts(read: FeedRead<LoadDraft>): LoadDraft[] {

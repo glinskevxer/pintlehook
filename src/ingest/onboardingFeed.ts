@@ -15,7 +15,7 @@ import type { ApprovalKind } from '../domain/activation.js';
 import type { AuthorityStatus } from '../domain/party.js';
 import { readDay, readInteger, readOneOf, readOptionalText, readText, type Row } from './coerce.js';
 import type { FeedEnvelope } from './envelope.js';
-import { rowReference, type FeedRead, type RejectedRow } from './feed.js';
+import { readRows, rowReference, type FeedRead } from './feed.js';
 
 const APPROVAL_KINDS = ['outright', 'conditional'] as const;
 const AUTHORITY_STATUSES = ['active', 'pending', 'revoked', 'unknown'] as const;
@@ -101,18 +101,7 @@ export function readOnboardingFeed(
   envelope: FeedEnvelope,
   rows: readonly Row[],
 ): FeedRead<OnboardingDraft> {
-  const accepted: OnboardingDraft[] = [];
-  const rejected: RejectedRow[] = [];
-  rows.forEach((row, index) => {
-    const rowNumber = index + 1;
-    const draft = readOnboardingRow(envelope, row, rowNumber);
-    if (draft.ok) {
-      accepted.push(draft.value);
-    } else {
-      rejected.push({ rowNumber, problems: draft.problems, row });
-    }
-  });
-  return { envelope, accepted, rejected };
+  return readRows(envelope, rows, readOnboardingRow);
 }
 
 export function awaitingInsurance(read: FeedRead<OnboardingDraft>): OnboardingDraft[] {
