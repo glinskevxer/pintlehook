@@ -182,3 +182,42 @@ describe('text round trip', () => {
     expect(unwrap(again.verify())).toBe(4);
   });
 });
+
+describe('truncateTo', () => {
+  it('drops everything after a sequence', () => {
+    const log = filled();
+    expect(unwrap(log.truncateTo(1))).toBe(1);
+    expect(log.length).toBe(1);
+    expect(unwrap(log.verify())).toBe(1);
+  });
+
+  it('leaves the head digest where the kept record put it', () => {
+    const log = filled();
+    const first = log.at(1)!;
+    unwrap(log.truncateTo(1));
+    expect(log.headDigest).toBe(first.digest);
+    expect(log.nextSequence).toBe(2);
+  });
+
+  it('empties the log at zero', () => {
+    const log = filled();
+    unwrap(log.truncateTo(0));
+    expect(log.length).toBe(0);
+    expect(log.headDigest).toBe(GENESIS_DIGEST);
+  });
+
+  it('refuses a point past the end', () => {
+    expect(isErr(filled().truncateTo(9))).toBe(true);
+  });
+
+  it('refuses a negative point', () => {
+    expect(isErr(filled().truncateTo(-1))).toBe(true);
+  });
+
+  it('lets appending carry on from there', () => {
+    const log = filled();
+    unwrap(log.truncateTo(2));
+    expect(unwrap(log.append(draft('new'))).sequence).toBe(3);
+    expect(unwrap(log.verify())).toBe(3);
+  });
+});

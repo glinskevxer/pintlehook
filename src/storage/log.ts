@@ -127,6 +127,22 @@ export class JournalLog {
     return ok(this.records.length);
   }
 
+  /**
+   * Drop everything after a sequence. Only a commit that failed to fold uses
+   * this, and it uses it to put the log back where it was a moment ago rather
+   * than to rewrite history.
+   */
+  truncateTo(sequence: number): Result<number> {
+    if (!Number.isInteger(sequence) || sequence < 0) {
+      return fail('journal_truncate_invalid', 'a truncation point is a whole number from zero');
+    }
+    if (sequence > this.records.length) {
+      return fail('journal_truncate_ahead', 'cannot truncate past the end of the journal');
+    }
+    this.records.length = sequence;
+    return ok(sequence);
+  }
+
   toText(): string {
     return this.records.map(encodeRecord).join('\n');
   }
