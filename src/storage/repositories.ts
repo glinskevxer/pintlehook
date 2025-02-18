@@ -6,7 +6,7 @@
 
 import { compareDays, type Day } from '../util/clock.js';
 import { contains, type DayInterval } from '../util/interval.js';
-import { ascending, byKey, byText, chain, sorted } from '../util/ordering.js';
+import { ascending, byKey, byText, chain, sorted, type Comparator } from '../util/ordering.js';
 import { fail, ok, type Result } from '../util/result.js';
 import {
   NO_DAY,
@@ -17,11 +17,26 @@ import {
   type AdvocateRow,
   type CarrierRow,
   type ClaimRow,
+  type FlagRow,
   type LoadRow,
   type ReferralRow,
   type TouchRow,
 } from './rows.js';
 import { referralKeyOf, type Store } from './store.js';
+import type { Table } from './table.js';
+
+/**
+ * Every list read was written as "ask the index, then sort, and give nothing
+ * back if the index name was wrong". Eleven copies of that meant eleven places
+ * where a typo in an index name turned into an empty list rather than an error.
+ */
+function listBy<T>(table: Table<T>, index: string, key: string, compare: Comparator<T>): T[] {
+  const rows = table.by(index, key);
+  if (!rows.ok) {
+    throw new Error(`${index} is not an index on this table`);
+  }
+  return sorted(rows.value, compare);
+}
 
 export function carrierById(store: Store, id: string): Result<CarrierRow> {
   const row = store.carriers.get(id);
@@ -52,46 +67,42 @@ export function advocateByCode(store: Store, code: string): Result<AdvocateRow> 
 }
 
 export function advocatesOfCarrier(store: Store, carrier: string): AdvocateRow[] {
-  const rows = store.advocates.by('carrier', carrier);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: AdvocateRow) => row.id, byText),
-      )
-    : [];
+  return listBy(
+    store.advocates,
+    'carrier',
+    carrier,
+    byKey((row: AdvocateRow) => row.id, byText),
+  );
 }
 
 export function enrolledAdvocates(store: Store, program: string): AdvocateRow[] {
-  const rows = store.advocates.by('program', program);
-  return rows.ok
-    ? sorted(
-        rows.value.filter(isEnrolledRow),
-        byKey((row: AdvocateRow) => row.id, byText),
-      )
-    : [];
+  return listBy(
+    store.advocates,
+    'program',
+    program,
+    byKey((row: AdvocateRow) => row.id, byText),
+  ).filter(isEnrolledRow);
 }
 
 export function touchesForInvitee(store: Store, invitee: string): TouchRow[] {
-  const rows = store.touches.by('invitee', invitee);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        chain(
-          byKey((row: TouchRow) => row.at, ascending),
-          byKey((row: TouchRow) => row.id, byText),
-        ),
-      )
-    : [];
+  return listBy(
+    store.touches,
+    'invitee',
+    invitee,
+    chain(
+      byKey((row: TouchRow) => row.at, ascending),
+      byKey((row: TouchRow) => row.id, byText),
+    ),
+  );
 }
 
 export function touchesForAdvocate(store: Store, advocate: string): TouchRow[] {
-  const rows = store.touches.by('advocate', advocate);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: TouchRow) => row.at, ascending),
-      )
-    : [];
+  return listBy(
+    store.touches,
+    'advocate',
+    advocate,
+    byKey((row: TouchRow) => row.at, ascending),
+  );
 }
 
 export function referralByKey(store: Store, program: string, invitee: string): Result<ReferralRow> {
@@ -101,36 +112,33 @@ export function referralByKey(store: Store, program: string, invitee: string): R
 }
 
 export function referralsOfAdvocate(store: Store, advocate: string): ReferralRow[] {
-  const rows = store.referrals.by('advocate', advocate);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: ReferralRow) => row.key, byText),
-      )
-    : [];
+  return listBy(
+    store.referrals,
+    'advocate',
+    advocate,
+    byKey((row: ReferralRow) => row.key, byText),
+  );
 }
 
 export function referralsInState(store: Store, state: string): ReferralRow[] {
-  const rows = store.referrals.by('state', state);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: ReferralRow) => row.key, byText),
-      )
-    : [];
+  return listBy(
+    store.referrals,
+    'state',
+    state,
+    byKey((row: ReferralRow) => row.key, byText),
+  );
 }
 
 export function loadsOfCarrier(store: Store, carrier: string): LoadRow[] {
-  const rows = store.loads.by('carrier', carrier);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        chain(
-          byKey((row: LoadRow) => row.deliveredOn, byText),
-          byKey((row: LoadRow) => row.proNumber, byText),
-        ),
-      )
-    : [];
+  return listBy(
+    store.loads,
+    'carrier',
+    carrier,
+    chain(
+      byKey((row: LoadRow) => row.deliveredOn, byText),
+      byKey((row: LoadRow) => row.proNumber, byText),
+    ),
+  );
 }
 
 export function deliveredLoadsIn(
@@ -155,13 +163,12 @@ export function deliveredLoadsIn(
 }
 
 export function claimsForLoad(store: Store, load: string): ClaimRow[] {
-  const rows = store.claims.by('load', load);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: ClaimRow) => row.id, byText),
-      )
-    : [];
+  return listBy(
+    store.claims,
+    'load',
+    load,
+    byKey((row: ClaimRow) => row.id, byText),
+  );
 }
 
 export function claimsForCarrier(store: Store, carrier: string): ClaimRow[] {
@@ -173,26 +180,24 @@ export function claimsForCarrier(store: Store, carrier: string): ClaimRow[] {
 }
 
 export function accrualsOfAdvocate(store: Store, advocate: string): AccrualRow[] {
-  const rows = store.accruals.by('advocate', advocate);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        chain(
-          byKey((row: AccrualRow) => row.postedOn, byText),
-          byKey((row: AccrualRow) => row.id, byText),
-        ),
-      )
-    : [];
+  return listBy(
+    store.accruals,
+    'advocate',
+    advocate,
+    chain(
+      byKey((row: AccrualRow) => row.postedOn, byText),
+      byKey((row: AccrualRow) => row.id, byText),
+    ),
+  );
 }
 
 export function accrualsForReferral(store: Store, referralKey: string): AccrualRow[] {
-  const rows = store.accruals.by('referral', referralKey);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: AccrualRow) => row.id, byText),
-      )
-    : [];
+  return listBy(
+    store.accruals,
+    'referral',
+    referralKey,
+    byKey((row: AccrualRow) => row.id, byText),
+  );
 }
 
 export function accrualsInProgramYear(
@@ -200,13 +205,12 @@ export function accrualsInProgramYear(
   advocate: string,
   programYearFrom: string,
 ): AccrualRow[] {
-  const rows = store.accruals.by('year', `${advocate}:${programYearFrom}`);
-  return rows.ok
-    ? sorted(
-        rows.value,
-        byKey((row: AccrualRow) => row.id, byText),
-      )
-    : [];
+  return listBy(
+    store.accruals,
+    'year',
+    `${advocate}:${programYearFrom}`,
+    byKey((row: AccrualRow) => row.id, byText),
+  );
 }
 
 export function accrualsUpTo(store: Store, advocate: string, when: Day): Result<AccrualRow[]> {
@@ -224,13 +228,14 @@ export function accrualsUpTo(store: Store, advocate: string, when: Day): Result<
 }
 
 export function openFlagsOf(store: Store, advocate: string): string[] {
-  const rows = store.flags.by('advocate', advocate);
-  return rows.ok
-    ? sorted(
-        rows.value.filter(isOpenFlag).map((row) => row.flag),
-        byText,
-      )
-    : [];
+  return listBy(
+    store.flags,
+    'advocate',
+    advocate,
+    byKey((row: FlagRow) => row.flag, byText),
+  )
+    .filter(isOpenFlag)
+    .map((row) => row.flag);
 }
 
 export function hasOpenFlags(store: Store, advocate: string): boolean {

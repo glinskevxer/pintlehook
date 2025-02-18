@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { GENESIS_DIGEST, encodeRecord, type JournalDraft } from '../../src/storage/journal.js';
+import {
+  GENESIS_DIGEST,
+  encodeRecord,
+  sealRecord,
+  type JournalDraft,
+} from '../../src/storage/journal.js';
 import { JournalLog } from '../../src/storage/log.js';
 import { isErr, unwrap } from '../../src/util/result.js';
 
@@ -130,16 +135,25 @@ describe('verify', () => {
     }
   });
 
-  it('is not fooled by a record resealed against a rewritten previous digest', () => {
-    const records = [...filled().all()];
-    const tamperedSecond = { ...records[1]!, payload: { note: 'edited' } };
-    const resealed = unwrap(
-      JournalLog.fromRecords([records[0]!]).ok
-        ? { ok: true as const, value: tamperedSecond }
-        : { ok: true as const, value: tamperedSecond },
+  it('catches a record resealed against a rewritten previous digest', () => {
+    const original = filled().all();
+    const edited = unwrap(
+      sealRecord(
+        2,
+        {
+          at: original[1]!.at,
+          kind: original[1]!.kind,
+          key: 'edited',
+          payload: { note: 'edited' },
+        },
+        original[0]!.digest,
+      ),
     );
-    const r = JournalLog.fromRecords([records[0]!, resealed, records[2]!]);
+    const r = JournalLog.fromRecords([original[0]!, edited, original[2]!]);
     expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.problems[0]!.code).toBe('journal_chain_broken');
+    }
   });
 });
 
