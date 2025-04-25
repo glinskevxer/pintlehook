@@ -8,6 +8,7 @@ import { contextFor, fixedClock, type Context } from '../../src/service/context.
 import {
   accrualPass,
   clawbackPass,
+  factsOf,
   positionOf,
   qualifiedReferralsOf,
   qualifyPass,
@@ -21,7 +22,7 @@ import type { JournalDraft } from '../../src/storage/journal.js';
 import { Store } from '../../src/storage/store.js';
 import { day } from '../../src/util/clock.js';
 import { interval } from '../../src/util/interval.js';
-import { unwrap } from '../../src/util/result.js';
+import { isErr, unwrap } from '../../src/util/result.js';
 
 const AT = Date.UTC(2025, 11, 2);
 const PROGRAM_YEAR = interval(day(2025, 1, 1), day(2026, 1, 1));
@@ -320,5 +321,63 @@ describe('runCycle', () => {
 describe('undatedAccruals', () => {
   it('is empty for an advocate whose postings all carry a day', () => {
     expect(undatedAccruals(context, advocateId(1))).toEqual([]);
+  });
+});
+
+describe('factsOf', () => {
+  it('reads the days and the margin off one referral row', () => {
+    unwrap(
+      store.commit([
+        ...referral(9, '2025-02-01'),
+        load(1, 9, '2025-02-10'),
+        load(2, 9, '2025-03-10'),
+      ]),
+    );
+    unwrap(qualifyPass(context, catalog, programId(1)));
+    const row = store.referrals.get('prg_00000001:cxr_00000009')!;
+    const facts = unwrap(factsOf(context, catalog, row));
+    expect(facts.invitee).toBe(carrierId(9));
+    expect(facts.effectiveActivation).toEqual(day(2025, 2, 1));
+    expect(facts.qualifiedOn).toEqual(day(2025, 3, 10));
+    expect(facts.margin.minor).toBe(100_000);
+  });
+
+  it('leaves the qualifying day off a referral that has not qualified', () => {
+    unwrap(store.commit([...referral(9, '2025-02-01'), load(1, 9, '2025-02-10')]));
+    const row = store.referrals.get('prg_00000001:cxr_00000009')!;
+    expect(unwrap(factsOf(context, catalog, row)).qualifiedOn).toBeUndefined();
+  });
+
+  it('fails on a referral with no activation day', () => {
+    unwrap(
+      store.commit([
+        {
+          at: AT,
+          kind: 'referral_opened',
+          key: 'prg_00000001:cxr_00000007',
+          payload: { program: programId(1), invitee: carrierId(7), recordedOn: '2025-01-05' },
+        },
+      ]),
+    );
+    const row = store.referrals.get('prg_00000001:cxr_00000007')!;
+    expect(isErr(factsOf(context, catalog, row))).toBe(true);
+  });
+
+  it('gives the two passes the same answer for one referral', () => {
+    unwrap(
+      store.commit([
+        ...referral(9, '2025-02-01'),
+        load(1, 9, '2025-02-10'),
+        load(2, 9, '2025-03-10'),
+      ]),
+    );
+    unwrap(qualifyPass(context, catalog, programId(1)));
+    const row = store.referrals.get('prg_00000001:cxr_00000009')!;
+    const first = unwrap(factsOf(context, catalog, row));
+    const gathered = unwrap(
+      qualifiedReferralsOf(context, catalog, advocateId(1), programId(1), PROGRAM_YEAR),
+    );
+    expect(gathered[0]!.margin.minor).toBe(first.margin.minor);
+    expect(gathered[0]!.qualifiedOn).toEqual(first.qualifiedOn);
   });
 });

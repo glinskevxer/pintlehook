@@ -20,7 +20,7 @@ import {
   enrolledAdvocates,
   referralsInState,
 } from '../storage/repositories.js';
-import { NO_DAY, readDayText, requireDayText } from '../storage/rows.js';
+import { NO_DAY, readDayText, requireDayText, type ReferralRow } from '../storage/rows.js';
 import { runAccruals, type QualifiedReferral } from './accrualEngine.js';
 import type { Catalog } from './catalog.js';
 import { assessReferral, clawbackDrafts } from './clawbackService.js';
@@ -41,6 +41,55 @@ export interface CycleReport {
   readonly clawedBack: number;
   readonly accrualsPosted: number;
   readonly settlement: SettlementPlan;
+}
+
+/**
+ * A referral row read back into the two things every pass needs from it: the
+ * days it carries, and the margin behind it. Three passes were each doing this
+ * in five lines, and one of them was reading the activation day out of the row
+ * while another recomputed it, which is exactly how two passes end up
+ * disagreeing about the same referral.
+ */
+export interface ReferralFacts {
+  readonly key: string;
+  readonly invitee: CarrierId;
+  readonly effectiveActivation: Day;
+  readonly qualifiedOn?: Day | undefined;
+  readonly margin: ReturnType<typeof money>;
+}
+
+export function factsOf(
+  context: Context,
+  catalog: Catalog,
+  row: ReferralRow,
+): Result<ReferralFacts> {
+  const activation = requireDayText(row.effectiveActivation, 'effectiveActivation');
+  if (!activation.ok) {
+    return activation;
+  }
+  const margin = qualifyReferral(context, catalog, {
+    program: row.program as ProgramId,
+    invitee: row.invitee as CarrierId,
+    effectiveActivation: activation.value,
+  });
+  if (!margin.ok) {
+    return margin;
+  }
+  let qualifiedOn: Day | undefined;
+  if (row.qualifiedOn !== NO_DAY) {
+    const read = requireDayText(row.qualifiedOn, 'qualifiedOn');
+    if (!read.ok) {
+      return read;
+    }
+    qualifiedOn = read.value;
+  }
+  return ok({
+    key: row.key,
+    invitee: row.invitee as CarrierId,
+    effectiveActivation: activation.value,
+    qualifiedOn,
+    margin: margin.value.deliveredMargin,
+  });
 }
 
 /** Every attributed referral that might now meet its qualifying count. */
@@ -94,27 +143,18 @@ export function clawbackPass(
     if (row.program !== program || row.qualifiedOn === NO_DAY) {
       continue;
     }
-    const qualifiedOn = requireDayText(row.qualifiedOn, 'qualifiedOn');
-    if (!qualifiedOn.ok) {
-      return qualifiedOn;
+    const facts = factsOf(context, catalog, row);
+    if (!facts.ok) {
+      return facts;
     }
-    const activation = requireDayText(row.effectiveActivation, 'effectiveActivation');
-    if (!activation.ok) {
-      return activation;
-    }
-    const margin = qualifyReferral(context, catalog, {
-      program,
-      invitee: row.invitee as CarrierId,
-      effectiveActivation: activation.value,
-    });
-    if (!margin.ok) {
-      return margin;
+    if (facts.value.qualifiedOn === undefined) {
+      continue;
     }
     const request = {
       program,
-      invitee: row.invitee as CarrierId,
-      qualifiedOn: qualifiedOn.value,
-      deliveredMargin: margin.value.deliveredMargin,
+      invitee: facts.value.invitee,
+      qualifiedOn: facts.value.qualifiedOn,
+      deliveredMargin: facts.value.margin,
     };
     const assessment = assessReferral(context, catalog, request);
     if (!assessment.ok) {
@@ -149,33 +189,19 @@ export function qualifiedReferralsOf(
     if (row.program !== program || row.advocate !== advocate) {
       continue;
     }
-    const qualifiedOn = requireDayText(row.qualifiedOn, 'qualifiedOn');
-    if (!qualifiedOn.ok) {
-      return qualifiedOn;
+    const facts = factsOf(context, catalog, row);
+    if (!facts.ok) {
+      return facts;
     }
+    const qualifiedOn = facts.value.qualifiedOn;
     if (
-      compareDays(qualifiedOn.value, programYear.from) < 0 ||
-      compareDays(qualifiedOn.value, programYear.until) >= 0
+      qualifiedOn === undefined ||
+      compareDays(qualifiedOn, programYear.from) < 0 ||
+      compareDays(qualifiedOn, programYear.until) >= 0
     ) {
       continue;
     }
-    const activation = requireDayText(row.effectiveActivation, 'effectiveActivation');
-    if (!activation.ok) {
-      return activation;
-    }
-    const margin = qualifyReferral(context, catalog, {
-      program,
-      invitee: row.invitee as CarrierId,
-      effectiveActivation: activation.value,
-    });
-    if (!margin.ok) {
-      return margin;
-    }
-    found.push({
-      referralKey: row.key,
-      qualifiedOn: qualifiedOn.value,
-      margin: margin.value.deliveredMargin,
-    });
+    found.push({ referralKey: row.key, qualifiedOn, margin: facts.value.margin });
   }
   return ok(found);
 }
