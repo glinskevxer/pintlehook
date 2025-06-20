@@ -242,3 +242,41 @@ describe('laneReport', () => {
     expect(report.footnotes[0]).toContain('50000');
   });
 });
+
+describe('the tally behind both readers', () => {
+  it('gives the same average whichever reader built the row', () => {
+    unwrap(
+      store.commit([
+        ...referral(9),
+        load(1, 9, 'IL', 'TX', 50_000),
+        load(2, 9, 'IL', 'TX', 31_000),
+      ]),
+    );
+    const direct = unwrap(lanesForCarrier(context, carrierId(9), 'USD'))[0]!;
+    const rolled = unwrap(lanesForInvitees(context, advocateId(1), programId(1), 'USD'))[0]!;
+    expect(rolled.averageMargin.minor).toBe(direct.averageMargin.minor);
+    expect(rolled.margin.minor).toBe(direct.margin.minor);
+    expect(rolled.loads).toBe(direct.loads);
+  });
+
+  it('rolls two invitees on one lane into a single row with one average', () => {
+    unwrap(
+      store.commit([
+        ...referral(9),
+        ...referral(8),
+        load(1, 9, 'IL', 'TX', 50_000),
+        load(2, 8, 'IL', 'TX', 30_000),
+      ]),
+    );
+    const rows = unwrap(lanesForInvitees(context, advocateId(1), programId(1), 'USD'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.averageMargin.minor).toBe(40_000);
+  });
+
+  it('rounds an average towards zero rather than away', () => {
+    unwrap(store.commit([load(1, 9, 'IL', 'TX', 10_000), load(2, 9, 'IL', 'TX', 10_001)]));
+    expect(unwrap(lanesForCarrier(context, carrierId(9), 'USD'))[0]!.averageMargin.minor).toBe(
+      10_000,
+    );
+  });
+});

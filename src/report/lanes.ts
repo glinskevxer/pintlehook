@@ -26,12 +26,38 @@ export interface LaneRow {
   readonly averageMargin: Money;
 }
 
+/**
+ * Both lane readers were building the same map and then turning it into the
+ * same rows, and the average was computed twice in two places that could drift.
+ * One tally, one place that divides.
+ */
+class LaneTally {
+  private readonly counts = new Map<string, { loads: number; minor: number }>();
+
+  add(lane: string, loads: number, minor: number): void {
+    const held = this.counts.get(lane) ?? { loads: 0, minor: 0 };
+    held.loads += loads;
+    held.minor += minor;
+    this.counts.set(lane, held);
+  }
+
+  rows(currency: Currency): LaneRow[] {
+    const rows = [...this.counts.entries()].map(([lane, held]) => ({
+      lane,
+      loads: held.loads,
+      margin: money(currency, held.minor),
+      averageMargin: money(currency, held.loads === 0 ? 0 : Math.trunc(held.minor / held.loads)),
+    }));
+    return sorted(rows, (left, right) => byText(left.lane, right.lane));
+  }
+}
+
 export function lanesForCarrier(
   context: Context,
   carrier: string,
   currency: Currency,
 ): Result<LaneRow[]> {
-  const counts = new Map<string, { loads: number; minor: number }>();
+  const tally = new LaneTally();
   for (const row of loadsOfCarrier(context.store, carrier)) {
     const load = loadOf(row);
     if (!load.ok) {
@@ -40,19 +66,9 @@ export function lanesForCarrier(
     if (load.value.status !== 'delivered') {
       continue;
     }
-    const key = laneKey(load.value.lane);
-    const held = counts.get(key) ?? { loads: 0, minor: 0 };
-    held.loads += 1;
-    held.minor += grossMargin(load.value).minor;
-    counts.set(key, held);
+    tally.add(laneKey(load.value.lane), 1, grossMargin(load.value).minor);
   }
-  const rows = [...counts.entries()].map(([lane, held]) => ({
-    lane,
-    loads: held.loads,
-    margin: money(currency, held.minor),
-    averageMargin: money(currency, Math.trunc(held.minor / held.loads)),
-  }));
-  return ok(sorted(rows, (left, right) => byText(left.lane, right.lane)));
+  return ok(tally.rows(currency));
 }
 
 export function lanesForInvitees(
@@ -61,7 +77,7 @@ export function lanesForInvitees(
   program: ProgramId,
   currency: Currency,
 ): Result<LaneRow[]> {
-  const counts = new Map<string, { loads: number; minor: number }>();
+  const tally = new LaneTally();
   for (const referral of referralsOfAdvocate(context.store, advocate)) {
     if (referral.program !== program) {
       continue;
@@ -71,19 +87,10 @@ export function lanesForInvitees(
       return lanes;
     }
     for (const lane of lanes.value) {
-      const held = counts.get(lane.lane) ?? { loads: 0, minor: 0 };
-      held.loads += lane.loads;
-      held.minor += lane.margin.minor;
-      counts.set(lane.lane, held);
+      tally.add(lane.lane, lane.loads, lane.margin.minor);
     }
   }
-  const rows = [...counts.entries()].map(([lane, held]) => ({
-    lane,
-    loads: held.loads,
-    margin: money(currency, held.minor),
-    averageMargin: money(currency, Math.trunc(held.minor / held.loads)),
-  }));
-  return ok(sorted(rows, (left, right) => byText(left.lane, right.lane)));
+  return ok(tally.rows(currency));
 }
 
 export interface LaneOverlap {
