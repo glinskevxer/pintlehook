@@ -19,7 +19,7 @@ export interface ApiError {
   readonly problems: readonly Problem[];
 }
 
-const NOT_FOUND = ['_unknown', '_not_registered', 'no_match'] as const;
+const NOT_FOUND = ['_unknown', '_not_registered', '_no_match', '_no_version', '_no_tier'] as const;
 
 const CONFLICT = [
   '_already_open',

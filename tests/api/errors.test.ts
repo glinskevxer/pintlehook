@@ -8,6 +8,13 @@ describe('statusFor', () => {
     expect(statusFor('advocate_code_unknown')).toBe(404);
     expect(statusFor('registry_source_not_registered')).toBe(404);
     expect(statusFor('resolution_no_match')).toBe(404);
+    expect(statusFor('program_no_version')).toBe(404);
+    expect(statusFor('schedule_no_tier')).toBe(404);
+  });
+
+  it('keeps a missing input field a bad request rather than a not found', () => {
+    expect(statusFor('field_missing')).toBe(400);
+    expect(statusFor('query_missing')).toBe(400);
   });
 
   it('reads a state clash as a conflict', () => {
