@@ -46,7 +46,7 @@ function move(
     return cutOn;
   }
   if (compareDays(on, cutOn.value) < 0) {
-    return fail('batch_dated_before_cut', `a batch cannot be ${to} before it was cut`);
+    return fail('batch_dated_too_early', `a batch cannot be ${to} before it was cut`);
   }
   return ok([
     {

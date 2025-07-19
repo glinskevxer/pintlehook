@@ -95,7 +95,7 @@ describe('releaseBatch and payBatch', () => {
     const r = releaseBatch(context, batchId(1), day(2025, 6, 1));
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
-      expect(r.problems[0]!.code).toBe('batch_dated_before_cut');
+      expect(r.problems[0]!.code).toBe('batch_dated_too_early');
     }
   });
 
