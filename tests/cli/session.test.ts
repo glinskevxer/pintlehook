@@ -68,7 +68,7 @@ describe('opening', () => {
     const r = openSession({ ...options(directory), zone: 'Europe/Riga' });
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
-      expect(r.problems[0]!.code).toBe('session_zone_unknown');
+      expect(r.problems[0]!.code).toBe('session_zone_unsupported');
     }
   });
 

@@ -44,7 +44,7 @@ export interface Session {
 
 export function openSession(options: OpenOptions): Result<Session> {
   if (!isZoneId(options.zone)) {
-    return fail('session_zone_unknown', `no rule table for zone "${options.zone}"`);
+    return fail('session_zone_unsupported', `no rule table for zone "${options.zone}"`);
   }
   const zone: ZoneId = options.zone;
   const paths = pathsFor(options.directory);
