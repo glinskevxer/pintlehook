@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "verify-tree": "tsx scripts/verify-tree.ts"
   },
   "dependencies": {
     "commander": "13.1.0",
