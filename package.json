@@ -18,7 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "coverage": "vitest run --coverage",
-    "verify-tree": "tsx scripts/verify-tree.ts"
+    "verify-tree": "tsx scripts/verify-tree.ts",
+    "commands": "tsx scripts/build-command-reference.ts",
+    "commands:check": "tsx scripts/build-command-reference.ts --check"
   },
   "dependencies": {
     "commander": "13.1.0",
