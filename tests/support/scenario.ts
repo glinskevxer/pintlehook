@@ -185,6 +185,11 @@ export class Scenario {
     return carrierId(carrier);
   }
 
+  /** Write a record directly, for a state the services will not set up. */
+  writeRecord(kind: string, key: string, payload: Record<string, unknown>): this {
+    return this.write({ kind, key, payload });
+  }
+
   private write(draft: Omit<JournalDraft, 'at'>): this {
     unwrap(this.store.commit([{ at: this.context.clock.now(), ...draft }]));
     return this;
