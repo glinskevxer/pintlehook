@@ -9,12 +9,12 @@
  * circulation.
  */
 
-import { formatDay, parseDay } from '../util/clock.js';
-import { isCurrency } from '../util/money.js';
-import { fail, ok } from '../util/result.js';
+import { formatDay } from '../util/clock.js';
+import { ok } from '../util/result.js';
 import { readAdvocateId, readProgramId } from '../domain/identity.js';
 import { definitions, runReport } from '../report/registry.js';
 import { parseShape } from '../report/table.js';
+import { pathValue, queryCurrency, queryDayOrToday } from './parse.js';
 import { optionalQuery, requiredQuery, type Route } from './router.js';
 
 export const listReports: Route = {
@@ -36,9 +36,9 @@ export const getReport: Route = {
   path: '/reports/:name',
   summary: 'run one report and answer with it rendered in the shape asked for',
   handle: (context, catalog, request, params) => {
-    const name = params['name'];
-    if (name === undefined) {
-      return fail('query_missing', 'the report name is required', 'name');
+    const name = pathValue(params, 'name');
+    if (!name.ok) {
+      return name;
     }
     const program = requiredQuery(request, 'program');
     if (!program.ok) {
@@ -52,12 +52,11 @@ export const getReport: Route = {
     if (!shape.ok) {
       return shape;
     }
-    const currency = optionalQuery(request, 'currency') ?? 'USD';
-    if (!isCurrency(currency)) {
-      return fail('query_currency_unsupported', `we do not carry ${currency}`, 'currency');
+    const currency = queryCurrency(request, 'currency');
+    if (!currency.ok) {
+      return currency;
     }
-    const rawAsOf = optionalQuery(request, 'asOf');
-    const asOf = rawAsOf === undefined ? ok(context.clock.today()) : parseDay(rawAsOf);
+    const asOf = queryDayOrToday(context, request, 'asOf');
     if (!asOf.ok) {
       return asOf;
     }
@@ -73,15 +72,15 @@ export const getReport: Route = {
     const rendered = runReport(
       context,
       catalog,
-      name,
-      { program: programId.value, currency, asOf: asOf.value, advocate },
+      name.value,
+      { program: programId.value, currency: currency.value, asOf: asOf.value, advocate },
       shape.value,
     );
     if (!rendered.ok) {
       return rendered;
     }
     return ok({
-      report: name,
+      report: name.value,
       shape: shape.value,
       asOf: formatDay(asOf.value),
       body: rendered.value,

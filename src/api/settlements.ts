@@ -7,54 +7,42 @@
  * safer than giving them a separate estimate that can disagree with it.
  */
 
-import { formatDay, parseDay } from '../util/clock.js';
-import { isCurrency } from '../util/money.js';
+import { formatDay } from '../util/clock.js';
 import { interval } from '../util/interval.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { ok, type Result } from '../util/result.js';
+import { bodyCurrency, bodyText, requiredBodyDay } from './parse.js';
 import { readBatchId, readProgramId } from '../domain/identity.js';
 import { summarize } from '../report/register.js';
 import { batchById, payBatch, releaseBatch } from '../service/releaseService.js';
 import { cutBatch } from '../service/settlementService.js';
 import { optionalQuery, requiredQuery, type ApiRequest, type Route } from './router.js';
 
-function dayField(body: Readonly<Record<string, unknown>>, field: string) {
-  const value = body[field];
-  return typeof value === 'string'
-    ? parseDay(value)
-    : fail('body_field_missing', `${field} is required`, field);
-}
-
-function textField(body: Readonly<Record<string, unknown>>, field: string): string {
-  const value = body[field];
-  return typeof value === 'string' ? value : '';
-}
-
 function requestFrom(request: ApiRequest) {
-  const program = readProgramId(textField(request.body, 'program'));
+  const program = readProgramId(bodyText(request.body, 'program'));
   if (!program.ok) {
     return program;
   }
-  const from = dayField(request.body, 'periodFrom');
+  const from = requiredBodyDay(request.body, 'periodFrom');
   if (!from.ok) {
     return from;
   }
-  const until = dayField(request.body, 'periodUntil');
+  const until = requiredBodyDay(request.body, 'periodUntil');
   if (!until.ok) {
     return until;
   }
-  const cutOn = dayField(request.body, 'cutOn');
+  const cutOn = requiredBodyDay(request.body, 'cutOn');
   if (!cutOn.ok) {
     return cutOn;
   }
-  const currency = textField(request.body, 'currency') || 'USD';
-  if (!isCurrency(currency)) {
-    return fail('body_currency_unsupported', `we do not carry ${currency}`, 'currency');
+  const currency = bodyCurrency(request.body, 'currency');
+  if (!currency.ok) {
+    return currency;
   }
   return ok({
     program: program.value,
     period: interval(from.value, until.value),
     cutOn: cutOn.value,
-    currency,
+    currency: currency.value,
   });
 }
 
@@ -125,7 +113,7 @@ function moveRoute(path: string, summary: string, move: typeof releaseBatch, fie
       if (!batch.ok) {
         return batch;
       }
-      const on = dayField(request.body, field);
+      const on = requiredBodyDay(request.body, field);
       if (!on.ok) {
         return on;
       }

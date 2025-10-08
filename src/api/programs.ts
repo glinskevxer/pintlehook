@@ -8,19 +8,18 @@
  * rather than the answer for this morning.
  */
 
-import { formatDay, parseDay } from '../util/clock.js';
-import { fail, ok, type Result } from '../util/result.js';
+import { formatDay } from '../util/clock.js';
+import { ok, type Result } from '../util/result.js';
 import type { ProgramId } from '../domain/identity.js';
 import { readProgramId } from '../domain/identity.js';
 import { orderedTiers } from '../domain/schedule.js';
 import { programById, rulesFor, scheduleFor, versionFor } from '../service/catalog.js';
-import { optionalQuery, type Route } from './router.js';
+import { pathValue, queryDayOrToday } from './parse.js';
+import type { Route } from './router.js';
 
 function programFrom(params: Readonly<Record<string, string>>): Result<ProgramId> {
-  const raw = params['program'];
-  return raw === undefined
-    ? fail('query_missing', 'the program is required', 'program')
-    : readProgramId(raw);
+  const raw = pathValue(params, 'program');
+  return raw.ok ? readProgramId(raw.value) : raw;
 }
 
 export const listPrograms: Route = {
@@ -74,8 +73,7 @@ export const getRules: Route = {
     if (!program.ok) {
       return program;
     }
-    const raw = optionalQuery(request, 'on');
-    const on = raw === undefined ? ok(context.clock.today()) : parseDay(raw);
+    const on = queryDayOrToday(context, request, 'on');
     if (!on.ok) {
       return on;
     }
@@ -105,8 +103,7 @@ export const getSchedule: Route = {
     if (!program.ok) {
       return program;
     }
-    const raw = optionalQuery(request, 'on');
-    const on = raw === undefined ? ok(context.clock.today()) : parseDay(raw);
+    const on = queryDayOrToday(context, request, 'on');
     if (!on.ok) {
       return on;
     }
