@@ -10,7 +10,7 @@ import { readAdvocateId } from '../domain/identity.js';
 import { definitions, reportNames, runReport } from '../report/registry.js';
 import { parseShape } from '../report/table.js';
 import type { Catalog } from '../service/catalog.js';
-import { asOfOf, currencyOf, programOf, type CommonOptions } from './commands.js';
+import { asOfOf, readCommon, type CommonOptions } from './commands.js';
 import { EXIT_OK, emit, emitLines, reportProblems, type Sink } from './output.js';
 import type { Session } from './session.js';
 
@@ -36,17 +36,9 @@ export function reportCommand(
   name: string,
   options: ReportOptions,
 ): number {
-  const program = programOf(options);
-  if (!program.ok) {
-    return reportProblems(sink, program.problems);
-  }
-  const currency = currencyOf(options);
-  if (!currency.ok) {
-    return reportProblems(sink, currency.problems);
-  }
-  const asOf = asOfOf(session, options);
-  if (!asOf.ok) {
-    return reportProblems(sink, asOf.problems);
+  const common = readCommon(session, options);
+  if (!common.ok) {
+    return reportProblems(sink, common.problems);
   }
   const shape = parseShape(options.shape ?? 'text');
   if (!shape.ok) {
@@ -64,7 +56,7 @@ export function reportCommand(
     session.context,
     catalog,
     name,
-    { program: program.value, currency: currency.value, asOf: asOf.value, advocate },
+    { ...common.value, advocate },
     shape.value,
   );
   return emit(sink, rendered, (text) => text);

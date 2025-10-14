@@ -8,10 +8,10 @@
  * tests, and the settlement run is not the place to find that out.
  */
 
-import { formatDay, parseDay } from '../util/clock.js';
+import { formatDay, parseDay, type Day } from '../util/clock.js';
 import { isCurrency, type Currency } from '../util/money.js';
-import { fail, ok, type Result } from '../util/result.js';
-import { readAdvocateId, readProgramId } from '../domain/identity.js';
+import { err, fail, ok, type Result } from '../util/result.js';
+import { readAdvocateId, readProgramId, type ProgramId } from '../domain/identity.js';
 import { runIntegrity } from '../storage/integrity.js';
 import { trailForAdvocate, trailIsTrustworthy, describeEntry } from '../service/auditTrail.js';
 import type { Catalog } from '../service/catalog.js';
@@ -43,6 +43,32 @@ export function asOfOf(session: Session, options: CommonOptions) {
   return options.asOf === undefined ? ok(session.context.clock.today()) : parseDay(options.asOf);
 }
 
+export interface CommonValues {
+  readonly program: ProgramId;
+  readonly currency: Currency;
+  readonly asOf: Day;
+}
+
+/**
+ * Four commands opened with the same fifteen lines reading the same three
+ * options, and each one reported the first failure it hit. Reading all three
+ * and reporting every problem at once is both shorter and kinder: somebody who
+ * mistyped two options finds out about both.
+ */
+export function readCommon(session: Session, options: CommonOptions): Result<CommonValues> {
+  const program = programOf(options);
+  const currency = currencyOf(options);
+  const asOf = asOfOf(session, options);
+  if (!program.ok || !currency.ok || !asOf.ok) {
+    return err([
+      ...(program.ok ? [] : program.problems),
+      ...(currency.ok ? [] : currency.problems),
+      ...(asOf.ok ? [] : asOf.problems),
+    ]);
+  }
+  return ok({ program: program.value, currency: currency.value, asOf: asOf.value });
+}
+
 export function statusCommand(session: Session, sink: Sink): number {
   const integrity = runIntegrity(session.context.store);
   const lines = [
@@ -70,22 +96,18 @@ export function rulesCommand(
   sink: Sink,
   options: CommonOptions,
 ): number {
-  const program = programOf(options);
-  if (!program.ok) {
-    return reportProblems(sink, program.problems);
+  const common = readCommon(session, options);
+  if (!common.ok) {
+    return reportProblems(sink, common.problems);
   }
-  const found = programById(catalog, program.value);
+  const found = programById(catalog, common.value.program);
   if (!found.ok) {
     return reportProblems(sink, found.problems);
   }
-  const on = asOfOf(session, options);
-  if (!on.ok) {
-    return reportProblems(sink, on.problems);
-  }
-  const rules = rulesFor(catalog, program.value, on.value);
+  const rules = rulesFor(catalog, common.value.program, common.value.asOf);
   return emit(sink, rules, (value) =>
     [
-      `program ${program.value} on ${formatDay(on.value)}`,
+      `program ${common.value.program} on ${formatDay(common.value.asOf)}`,
       `  attribution window ${value.attributionWindowDays} days`,
       `  cure window ${value.cureWindowDays} days`,
       `  qualifying ${value.qualifyingLoadCount} loads in ${value.qualifyingWindowDays} days`,
@@ -101,16 +123,12 @@ export function exceptionsCommand(
   sink: Sink,
   options: CommonOptions,
 ): number {
-  const program = programOf(options);
-  if (!program.ok) {
-    return reportProblems(sink, program.problems);
+  const common = readCommon(session, options);
+  if (!common.ok) {
+    return reportProblems(sink, common.problems);
   }
-  const on = asOfOf(session, options);
-  if (!on.ok) {
-    return reportProblems(sink, on.problems);
-  }
-  const exceptions = buildExceptions(session.context, catalog, program.value);
-  return emit(sink, exceptions, (value) => renderText(exceptionReport(value, on.value)));
+  const exceptions = buildExceptions(session.context, catalog, common.value.program);
+  return emit(sink, exceptions, (value) => renderText(exceptionReport(value, common.value.asOf)));
 }
 
 export function auditCommand(session: Session, sink: Sink, advocate: string): number {

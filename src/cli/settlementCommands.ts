@@ -17,7 +17,7 @@ import { renderText } from '../report/table.js';
 import type { Catalog } from '../service/catalog.js';
 import { payBatch, releaseBatch } from '../service/releaseService.js';
 import { cutBatch } from '../service/settlementService.js';
-import { asOfOf, currencyOf, programOf, type CommonOptions } from './commands.js';
+import { readCommon, type CommonOptions } from './commands.js';
 import { EXIT_OK, emit, reportProblems, type Sink } from './output.js';
 import type { Session } from './session.js';
 
@@ -39,13 +39,9 @@ export function cutCommand(
   sink: Sink,
   options: CutOptions,
 ): number {
-  const program = programOf(options);
-  if (!program.ok) {
-    return reportProblems(sink, program.problems);
-  }
-  const currency = currencyOf(options);
-  if (!currency.ok) {
-    return reportProblems(sink, currency.problems);
+  const common = readCommon(session, options);
+  if (!common.ok) {
+    return reportProblems(sink, common.problems);
   }
   const from = requiredDay(options.from, 'from');
   if (!from.ok) {
@@ -55,15 +51,11 @@ export function cutCommand(
   if (!until.ok) {
     return reportProblems(sink, until.problems);
   }
-  const cutOn = asOfOf(session, options);
-  if (!cutOn.ok) {
-    return reportProblems(sink, cutOn.problems);
-  }
   const plan = cutBatch(session.context, catalog, {
-    program: program.value,
+    program: common.value.program,
     period: interval(from.value, until.value),
-    cutOn: cutOn.value,
-    currency: currency.value,
+    cutOn: common.value.asOf,
+    currency: common.value.currency,
   });
   if (!plan.ok) {
     return reportProblems(sink, plan.problems);

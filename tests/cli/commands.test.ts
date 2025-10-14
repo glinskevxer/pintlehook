@@ -9,6 +9,7 @@ import {
   exceptionsCommand,
   programOf,
   programsCommand,
+  readCommon,
   rulesCommand,
   saveCommand,
   statusCommand,
@@ -245,5 +246,40 @@ describe('save and verify', () => {
     expect(verifyCommand(session, sink)).not.toBe(EXIT_OK);
     expect(sink.errorOutput).toContain('integrity_advocate_carrier_exists');
     expect(sink.output).toBe('');
+  });
+});
+
+describe('readCommon', () => {
+  it('reads all three options together', () => {
+    const values = unwrap(
+      readCommon(session, { program: programId(1), currency: 'CAD', asOf: '2025-06-01' }),
+    );
+    expect(values.program).toBe(programId(1));
+    expect(values.currency).toBe('CAD');
+    expect(values.asOf).toEqual(day(2025, 6, 1));
+  });
+
+  it('defaults the currency and the day', () => {
+    const values = unwrap(readCommon(session, { program: programId(1) }));
+    expect(values.currency).toBe('USD');
+    expect(values.asOf).toEqual(day(2025, 9, 1));
+  });
+
+  it('reports every bad option at once rather than the first', () => {
+    const r = readCommon(session, { currency: 'GBP', asOf: 'soon' });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.problems).toHaveLength(3);
+      expect(r.problems.map((problem) => problem.code)).toContain('option_missing');
+      expect(r.problems.map((problem) => problem.code)).toContain('option_currency_unsupported');
+    }
+  });
+
+  it('reports two bad options when one was fine', () => {
+    const r = readCommon(session, { program: programId(1), currency: 'GBP', asOf: 'soon' });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.problems).toHaveLength(2);
+    }
   });
 });
