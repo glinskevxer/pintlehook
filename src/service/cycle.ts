@@ -266,6 +266,7 @@ export function runCycle(
     period: request.period,
     cutOn: request.cutOn,
     currency: request.currency,
+    programYearFrom: request.programYearFrom,
   });
   if (!settlement.ok) {
     return settlement;

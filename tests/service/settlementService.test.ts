@@ -5,6 +5,7 @@ import type { RewardSchedule } from '../../src/domain/schedule.js';
 import { buildCatalog } from '../../src/service/catalog.js';
 import { contextFor, fixedClock, type Context } from '../../src/service/context.js';
 import {
+  capReached,
   cutBatch,
   lineFor,
   settledIdsOf,
@@ -281,5 +282,71 @@ describe('settledIdsOf', () => {
 
   it('is empty for a batch with no lines', () => {
     expect(settledIdsOf(unwrap(cutBatch(context, catalog, request())).batch).size).toBe(0);
+  });
+});
+
+describe('the program year cap', () => {
+  function capped(capMinor: number) {
+    const withCap: Program = {
+      ...program,
+      versions: [
+        {
+          version: 1,
+          effectiveFrom: day(2024, 1, 1),
+          rules: { ...rules, programYearCapMinor: capMinor },
+          note: 'capped',
+        },
+      ],
+    };
+    return unwrap(buildCatalog([withCap], [{ program: programId(1), version: 1, schedule }]));
+  }
+
+  it('is not reached when the rules set no cap', () => {
+    unwrap(store.commit([accrual(1, 1, '2025-05-10', 900_000)]));
+    expect(capReached(context, advocateId(1), day(2025, 1, 1), 0)).toBe(false);
+  });
+
+  it('is reached once the year total meets the cap', () => {
+    unwrap(store.commit([accrual(1, 1, '2025-05-10', 60_000)]));
+    expect(capReached(context, advocateId(1), day(2025, 1, 1), 60_000)).toBe(true);
+    expect(capReached(context, advocateId(1), day(2025, 1, 1), 60_001)).toBe(false);
+  });
+
+  it('counts only the program year asked about', () => {
+    unwrap(store.commit([accrual(1, 1, '2025-05-10', 60_000)]));
+    expect(capReached(context, advocateId(1), day(2026, 1, 1), 10_000)).toBe(false);
+  });
+
+  it('nets a reversal off before comparing', () => {
+    unwrap(
+      store.commit([accrual(1, 1, '2025-05-10', 60_000), accrual(2, 1, '2025-05-20', -40_000)]),
+    );
+    expect(capReached(context, advocateId(1), day(2025, 1, 1), 60_000)).toBe(false);
+  });
+
+  it('holds the settlement line once the cap is reached', () => {
+    unwrap(store.commit([accrual(1, 1, '2025-05-10', 60_000)]));
+    const plan = unwrap(
+      cutBatch(context, capped(60_000), request({ programYearFrom: day(2025, 1, 1) })),
+    );
+    const line = lineFor(plan.batch, advocateId(1));
+    expect(line!.hold.reasons).toContain('program_year_cap_reached');
+    expect(line!.payable.minor).toBe(0);
+  });
+
+  it('pays the same line under a higher cap', () => {
+    unwrap(store.commit([accrual(1, 1, '2025-05-10', 60_000)]));
+    const plan = unwrap(
+      cutBatch(context, capped(90_000), request({ programYearFrom: day(2025, 1, 1) })),
+    );
+    const line = lineFor(plan.batch, advocateId(1));
+    expect(line!.hold.held).toBe(false);
+    expect(line!.payable.minor).toBe(60_000);
+  });
+
+  it('measures the year from the period start when none was given', () => {
+    unwrap(store.commit([accrual(1, 1, '2025-05-10', 60_000)]));
+    const plan = unwrap(cutBatch(context, capped(60_000), request()));
+    expect(lineFor(plan.batch, advocateId(1))!.hold.held).toBe(false);
   });
 });

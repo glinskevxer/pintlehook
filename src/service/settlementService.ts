@@ -33,7 +33,12 @@ import {
   type RecoveryPolicy,
 } from '../domain/recovery.js';
 import type { JournalDraft } from '../storage/journal.js';
-import { accrualsOfAdvocate, enrolledAdvocates, openFlagsOf } from '../storage/repositories.js';
+import {
+  accrualsInProgramYear,
+  accrualsOfAdvocate,
+  enrolledAdvocates,
+  openFlagsOf,
+} from '../storage/repositories.js';
 import { readDayText, requireDayText, type AccrualRow } from '../storage/rows.js';
 import { rulesFor, type Catalog } from './catalog.js';
 import type { Context } from './context.js';
@@ -50,6 +55,8 @@ export interface SettlementRequest {
   readonly withholdingShare?: number | undefined;
   /** Accruals already settled in an earlier batch. */
   readonly settledAccrualIds?: ReadonlySet<string> | undefined;
+  /** The program year the cap is measured over, defaulting to the period start. */
+  readonly programYearFrom?: Day | undefined;
 }
 
 export interface SettlementPlan {
@@ -81,6 +88,29 @@ function accrualOf(row: AccrualRow, currency: Currency): Result<Accrual> {
     reverses: row.reverses === '' ? undefined : (row.reverses as AccrualId),
     note: row.note,
   });
+}
+
+/**
+ * Whether an advocate has taken as much out of this program year as the rules
+ * allow. A cap of zero means there is no cap, which is how every version in the
+ * catalogue has been written so far, and is exactly why this had to be wired
+ * from the rules rather than assumed: a cap that is never exercised is a cap
+ * nobody notices is dead.
+ */
+export function capReached(
+  context: Context,
+  advocate: AdvocateId,
+  programYearFrom: Day,
+  capMinor: number,
+): boolean {
+  if (capMinor <= 0) {
+    return false;
+  }
+  const posted = accrualsInProgramYear(context.store, advocate, formatDay(programYearFrom)).reduce(
+    (running, row) => running + row.amountMinor,
+    0,
+  );
+  return posted >= capMinor;
 }
 
 export function cutBatch(
@@ -157,7 +187,12 @@ export function cutBatch(
       minimumPayout: minimum,
       openEligibilityFlags: openFlagsOf(context.store, advocate.id),
       hasRemitDetails: true,
-      programYearCapReached: false,
+      programYearCapReached: capReached(
+        context,
+        advocate.id as AdvocateId,
+        request.programYearFrom ?? request.period.from,
+        rules.value.programYearCapMinor,
+      ),
       asOf: request.cutOn,
     });
     const line = buildLine(
