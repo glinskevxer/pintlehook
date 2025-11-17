@@ -26,12 +26,7 @@ import type {
 } from '../domain/identity.js';
 import { assessHold, type HoldVerdict } from '../domain/hold.js';
 import { buildLine, type SettlementBatch, type SettlementLine } from '../domain/settlement.js';
-import {
-  applyToSettlement,
-  emptyBalance,
-  fromMinor,
-  type RecoveryPolicy,
-} from '../domain/recovery.js';
+import { applyToSettlement, type RecoveryPolicy } from '../domain/recovery.js';
 import type { JournalDraft } from '../storage/journal.js';
 import {
   accrualsInProgramYear,
@@ -41,6 +36,7 @@ import {
 } from '../storage/repositories.js';
 import { readDayText, requireDayText, type AccrualRow } from '../storage/rows.js';
 import { rulesFor, type Catalog } from './catalog.js';
+import { balanceFor } from './recoveryService.js';
 import type { Context } from './context.js';
 
 export const DEFAULT_MINIMUM_PAYOUT_MINOR = 5_000;
@@ -167,10 +163,11 @@ export function cutBatch(
       continue;
     }
     const position = money(request.currency, positionMinor);
-    const balance =
-      positionMinor < 0
-        ? fromMinor(request.currency, -positionMinor, request.cutOn)
-        : emptyBalance(request.currency);
+    const held = balanceFor(context, advocate.id as AdvocateId, request.currency, request.cutOn);
+    if (!held.ok) {
+      return held;
+    }
+    const balance = held.value;
     const applied = applyToSettlement(
       balance,
       money(request.currency, Math.max(positionMinor, 0)),
