@@ -21,12 +21,12 @@ import {
 import type { CarrierId, ClaimId, ProgramId } from '../domain/identity.js';
 import { assessRetention, type RetentionAssessment } from '../domain/retention.js';
 import type { JournalDraft } from '../storage/journal.js';
-import { claimsForCarrier, loadsOfCarrier, referralByKey } from '../storage/repositories.js';
+import { claimsForCarrier, referralByKey } from '../storage/repositories.js';
 import { readDayText, type ClaimRow } from '../storage/rows.js';
 import { referralKeyOf } from '../storage/store.js';
 import { rulesFor, type Catalog } from './catalog.js';
 import type { Context } from './context.js';
-import { loadOf } from './qualificationService.js';
+import { loadsOf } from './qualificationService.js';
 
 export const DEFAULT_CHECKPOINT_DAYS = 60;
 export const DEFAULT_CLAIM_TOLERANCE: BasisPoints = 2500;
@@ -73,16 +73,12 @@ export function assessReferral(
   if (!rules.ok) {
     return rules;
   }
-  const loads = [];
-  for (const row of loadsOfCarrier(context.store, request.invitee)) {
-    const load = loadOf(row);
-    if (!load.ok) {
-      return load;
-    }
-    loads.push(load.value);
+  const loads = loadsOf(context, request.invitee);
+  if (!loads.ok) {
+    return loads;
   }
   const retention = assessRetention({
-    loads,
+    loads: loads.value,
     qualifiedOn: request.qualifiedOn,
     retentionDays: rules.value.retentionDays,
     checkpointDays: request.checkpointDays ?? DEFAULT_CHECKPOINT_DAYS,

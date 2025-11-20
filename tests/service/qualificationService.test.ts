@@ -5,8 +5,10 @@ import type { RewardSchedule } from '../../src/domain/schedule.js';
 import { buildCatalog } from '../../src/service/catalog.js';
 import { contextFor, fixedClock, type Context } from '../../src/service/context.js';
 import {
+  deliveredLoadsOf,
   deliveredMarginOf,
   loadOf,
+  loadsOf,
   qualificationDrafts,
   qualifyReferral,
   shortfallOf,
@@ -221,5 +223,69 @@ describe('qualificationDrafts', () => {
     unwrap(bare.commit([load(1, '2025-03-05'), load(2, '2025-03-20'), load(3, '2025-04-02')]));
     const outcome = unwrap(qualifyReferral(other, catalog, request));
     expect(isErr(qualificationDrafts(other, request, outcome))).toBe(true);
+  });
+});
+
+describe('loadsOf and deliveredLoadsOf', () => {
+  it('reads every load on file for a carrier', () => {
+    unwrap(store.commit([load(1, '2025-03-05'), load(2, '2025-03-20')]));
+    expect(unwrap(loadsOf(context, carrierId(9)))).toHaveLength(2);
+  });
+
+  it('gives nothing for a carrier that has hauled nothing', () => {
+    expect(unwrap(loadsOf(context, carrierId(8)))).toEqual([]);
+  });
+
+  it('keeps a load that was cancelled in the full list', () => {
+    unwrap(
+      store.commit([
+        load(1, '2025-03-05'),
+        {
+          at: AT,
+          kind: 'load_amended',
+          key: 'lod_1',
+          payload: { load: 'lod_1', field: 'status', value: 'cancelled' },
+        },
+      ]),
+    );
+    expect(unwrap(loadsOf(context, carrierId(9)))).toHaveLength(1);
+  });
+
+  it('leaves a cancelled load out of the delivered list', () => {
+    unwrap(
+      store.commit([
+        load(1, '2025-03-05'),
+        {
+          at: AT,
+          kind: 'load_amended',
+          key: 'lod_1',
+          payload: { load: 'lod_1', field: 'status', value: 'cancelled' },
+        },
+      ]),
+    );
+    expect(unwrap(deliveredLoadsOf(context, carrierId(9)))).toEqual([]);
+  });
+
+  it('gives the two readers the same answer when everything delivered', () => {
+    unwrap(store.commit([load(1, '2025-03-05'), load(2, '2025-03-20')]));
+    expect(unwrap(deliveredLoadsOf(context, carrierId(9))).length).toBe(
+      unwrap(loadsOf(context, carrierId(9))).length,
+    );
+  });
+
+  it('fails on a row whose delivery day cannot be read', () => {
+    unwrap(store.commit([load(1, '2025-03-05')]));
+    const row = store.loads.get('lod_1')!;
+    unwrap(
+      store.commit([
+        {
+          at: AT,
+          kind: 'load_delivered',
+          key: 'lod_9',
+          payload: { ...row, load: 'lod_9', proNumber: 'PL-9', deliveredOn: 'soon' },
+        },
+      ]),
+    );
+    expect(isErr(loadsOf(context, carrierId(9)))).toBe(true);
   });
 });

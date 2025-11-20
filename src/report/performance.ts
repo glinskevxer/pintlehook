@@ -11,11 +11,11 @@
 import { money, subtract, sum, type Currency, type Money } from '../util/money.js';
 import { byText, sorted } from '../util/ordering.js';
 import { ok, type Result } from '../util/result.js';
-import type { ProgramId } from '../domain/identity.js';
+import type { CarrierId, ProgramId } from '../domain/identity.js';
 import { grossMargin } from '../domain/load.js';
-import { loadOf } from '../service/qualificationService.js';
+import { deliveredLoadsOf } from '../service/qualificationService.js';
 import type { Context } from '../service/context.js';
-import { accrualsOfAdvocate, enrolledAdvocates, loadsOfCarrier } from '../storage/repositories.js';
+import { accrualsOfAdvocate, enrolledAdvocates } from '../storage/repositories.js';
 import { moneyColumn, numberColumn, textColumn, type Report } from './table.js';
 
 export interface AdvocatePerformance {
@@ -42,14 +42,12 @@ export function performanceFor(
     const mine = referrals.value.filter((row) => row.program === program);
     const margins: Money[] = [];
     for (const referral of mine) {
-      for (const load of loadsOfCarrier(context.store, referral.invitee)) {
-        const read = loadOf(load);
-        if (!read.ok) {
-          return read;
-        }
-        if (read.value.status === 'delivered') {
-          margins.push(grossMargin(read.value));
-        }
+      const loads = deliveredLoadsOf(context, referral.invitee as CarrierId);
+      if (!loads.ok) {
+        return loads;
+      }
+      for (const load of loads.value) {
+        margins.push(grossMargin(load));
       }
     }
     const cost = money(

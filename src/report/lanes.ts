@@ -12,11 +12,11 @@
 import { money, sum, type Currency, type Money } from '../util/money.js';
 import { byText, sorted } from '../util/ordering.js';
 import { ok, type Result } from '../util/result.js';
-import type { AdvocateId, ProgramId } from '../domain/identity.js';
+import type { AdvocateId, CarrierId, ProgramId } from '../domain/identity.js';
 import { grossMargin, laneKey } from '../domain/load.js';
 import type { Context } from '../service/context.js';
-import { loadOf } from '../service/qualificationService.js';
-import { advocateById, loadsOfCarrier, referralsOfAdvocate } from '../storage/repositories.js';
+import { deliveredLoadsOf } from '../service/qualificationService.js';
+import { advocateById, referralsOfAdvocate } from '../storage/repositories.js';
 import { moneyColumn, numberColumn, textColumn, type Report } from './table.js';
 
 export interface LaneRow {
@@ -57,16 +57,13 @@ export function lanesForCarrier(
   carrier: string,
   currency: Currency,
 ): Result<LaneRow[]> {
+  const loads = deliveredLoadsOf(context, carrier as CarrierId);
+  if (!loads.ok) {
+    return loads;
+  }
   const tally = new LaneTally();
-  for (const row of loadsOfCarrier(context.store, carrier)) {
-    const load = loadOf(row);
-    if (!load.ok) {
-      return load;
-    }
-    if (load.value.status !== 'delivered') {
-      continue;
-    }
-    tally.add(laneKey(load.value.lane), 1, grossMargin(load.value).minor);
+  for (const load of loads.value) {
+    tally.add(laneKey(load.lane), 1, grossMargin(load).minor);
   }
   return ok(tally.rows(currency));
 }

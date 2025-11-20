@@ -16,7 +16,7 @@ import type { Lane, Load, LoadStatus } from '../domain/load.js';
 import { resolveQualification, type QualificationOutcome } from '../domain/qualification.js';
 import type { JournalDraft } from '../storage/journal.js';
 import { loadsOfCarrier, referralByKey } from '../storage/repositories.js';
-import { NO_DAY, readDayText, type LoadRow } from '../storage/rows.js';
+import { readDayText, type LoadRow } from '../storage/rows.js';
 import { referralKeyOf } from '../storage/store.js';
 import { rulesFor, type Catalog } from './catalog.js';
 import type { Context } from './context.js';
@@ -41,6 +41,31 @@ export function loadOf(row: LoadRow): Result<Load> {
   });
 }
 
+/**
+ * Every load on file for a carrier, read back into domain values.
+ *
+ * Three callers were writing this loop, and they had drifted: one skipped a
+ * load that was not delivered and the other two kept it, so the same carrier
+ * had a different lane count depending on which report asked. One reader, and
+ * the filtering is the caller's business.
+ */
+export function loadsOf(context: Context, carrier: CarrierId): Result<Load[]> {
+  const loads: Load[] = [];
+  for (const row of loadsOfCarrier(context.store, carrier)) {
+    const load = loadOf(row);
+    if (!load.ok) {
+      return load;
+    }
+    loads.push(load.value);
+  }
+  return ok(loads);
+}
+
+export function deliveredLoadsOf(context: Context, carrier: CarrierId): Result<Load[]> {
+  const loads = loadsOf(context, carrier);
+  return loads.ok ? ok(loads.value.filter((load) => load.status === 'delivered')) : loads;
+}
+
 export interface QualificationRequest {
   readonly program: ProgramId;
   readonly invitee: CarrierId;
@@ -56,19 +81,12 @@ export function qualifyReferral(
   if (!rules.ok) {
     return rules;
   }
-  const loads: Load[] = [];
-  for (const row of loadsOfCarrier(context.store, request.invitee)) {
-    if (row.status !== 'delivered' && row.deliveredOn === NO_DAY) {
-      continue;
-    }
-    const load = loadOf(row);
-    if (!load.ok) {
-      return load;
-    }
-    loads.push(load.value);
+  const loads = loadsOf(context, request.invitee);
+  if (!loads.ok) {
+    return loads;
   }
   return resolveQualification({
-    loads,
+    loads: loads.value,
     effectiveActivation: request.effectiveActivation,
     qualifyingLoadCount: rules.value.qualifyingLoadCount,
     qualifyingWindowDays: rules.value.qualifyingWindowDays,
