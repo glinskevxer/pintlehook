@@ -1,6 +1,6 @@
 {
   "name": "pintlehook",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Carrier referral bounty administration for a freight brokerage",
   "license": "UNLICENSED",
@@ -10,6 +10,21 @@
     "node": ">=20.18.0"
   },
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "pintlehook": "dist/cli/entry.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md"
+  ],
+  "keywords": [
+    "freight",
+    "brokerage",
+    "referral",
+    "settlement"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -18,6 +33,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "coverage": "vitest run --coverage",
+    "start": "tsx src/cli/entry.ts",
     "verify-tree": "tsx scripts/verify-tree.ts",
     "commands": "tsx scripts/build-command-reference.ts",
     "commands:check": "tsx scripts/build-command-reference.ts --check",
